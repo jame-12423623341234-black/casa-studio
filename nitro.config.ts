@@ -1,8 +1,8 @@
 export default {
-  // Read PORT from Railway environment variable, fallback to 3000 locally
-  port: parseInt("3000", 10),
+  // Railway should always listen on port 3000 for this app.
+  port: 3000,
   host: "0.0.0.0",
-  
+
   // Cache settings for better performance
   routeRules: {
     "/**": {

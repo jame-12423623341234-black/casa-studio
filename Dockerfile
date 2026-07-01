@@ -28,6 +28,7 @@ COPY --from=builder /app/package.json ./package.json
 
 # Set production environment
 ENV NODE_ENV=production
+ENV PORT=3000
 
 # Expose the port
 EXPOSE 3000
@@ -35,5 +36,5 @@ EXPOSE 3000
 # Use dumb-init to handle signals
 ENTRYPOINT ["dumb-init", "--"]
 
-# Start the server - read PORT from environment
-CMD ["node", ".output/server/index.mjs"]
+# Start the server on port 3000
+CMD ["sh", "-c", "PORT=${PORT:-3000} node .output/server/index.mjs"]
