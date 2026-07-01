@@ -1,6 +1,6 @@
 export default {
-  // Use Railway's PORT environment variable (defaults to 3000 if not set)
-  port: parseInt("3000", 10),
+  // Read PORT from Railway environment variable, fallback to 3000 locally
+  port: parseInt(process.env.PORT || "3000", 10),
   host: "0.0.0.0",
   
   // Cache settings for better performance
