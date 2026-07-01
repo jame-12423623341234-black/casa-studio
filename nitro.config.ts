@@ -1,6 +1,4 @@
-import { defineNitroConfig } from "nitropack/config";
-
-export default defineNitroConfig({
+export default {
   // Use Railway's PORT environment variable (defaults to 3000 if not set)
   port: parseInt(process.env.PORT || "3000", 10),
   host: "0.0.0.0",
@@ -13,4 +11,4 @@ export default defineNitroConfig({
       },
     },
   },
-});
+};
