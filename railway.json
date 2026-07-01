@@ -1,8 +1,5 @@
 {
   "build": {
     "builder": "dockerfile"
-  },
-  "deploy": {
-    "startCommand": "PORT=3000 node .output/server/index.mjs"
   }
 }

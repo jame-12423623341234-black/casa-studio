@@ -33,8 +33,6 @@ ENV PORT=3000
 # Expose the port
 EXPOSE 3000
 
-# Use dumb-init to handle signals
-ENTRYPOINT ["dumb-init", "--"]
-
-# Start the server on port 3000
-CMD ["node", ".output/server/index.mjs"]
+# Use dumb-init to handle signals and run the app as the container entrypoint.
+# This avoids a broken command override when Railway appends extra args like `port=3000`.
+ENTRYPOINT ["dumb-init", "--", "node", ".output/server/index.mjs"]
