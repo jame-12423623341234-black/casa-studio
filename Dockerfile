@@ -1,30 +1,39 @@
 # Build stage
-FROM node:20-alpine as builder
+FROM oven/bun:latest as builder
 
 WORKDIR /app
 
 COPY package.json bun.lock* ./
 
-# Install dependencies (use npm or bun)
-RUN npm install --frozen-lockfile || npm install
+# Install dependencies with bun
+RUN bun install --frozen-lockfile
 
 COPY . .
 
 # Build the app (creates .output directory)
-RUN npm run build
+RUN bun run build
 
 # Production stage
 FROM node:20-alpine
 
 WORKDIR /app
 
-# Install only production dependencies
-COPY --from=builder /app/node_modules ./node_modules
+# Install dumb-init to handle signals properly
+RUN apk add --no-cache dumb-init
+
+# Copy built output and node_modules from builder
 COPY --from=builder /app/.output ./.output
+COPY --from=builder /app/node_modules ./node_modules
 COPY --from=builder /app/package.json ./package.json
 
-# Expose the port (Nitro defaults to 3000)
+# Set production environment
+ENV NODE_ENV=production
+
+# Expose the port
 EXPOSE 3000
 
-# Start the server
+# Use dumb-init to handle signals
+ENTRYPOINT ["dumb-init", "--"]
+
+# Start the server - read PORT from environment
 CMD ["node", ".output/server/index.mjs"]
