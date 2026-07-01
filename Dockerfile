@@ -37,4 +37,4 @@ EXPOSE 3000
 ENTRYPOINT ["dumb-init", "--"]
 
 # Start the server on port 3000
-CMD ["sh", "-c", "PORT=${PORT:-3000} node .output/server/index.mjs"]
+CMD ["node", ".output/server/index.mjs"]
