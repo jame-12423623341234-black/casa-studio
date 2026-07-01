@@ -1,0 +1,467 @@
+import { useState, useRef, useCallback } from "react";
+import {
+  Upload, Trash2, Edit3, Download, FileText, X, Check,
+  BarChart2, Users, RefreshCw, AlertCircle, Plus
+} from "lucide-react";
+import {
+  getFiles,
+  saveFile,
+  deleteFile,
+  getSignInHistory,
+  deleteSignInHistoryEntry,
+  deleteUserSignInHistory,
+  type DownloadFile,
+  type SignInHistoryEntry,
+} from "@/lib/auth";
+
+interface AdminPanelProps {
+  onClose: () => void;
+}
+
+function formatBytes(bytes: number): string {
+  if (bytes < 1024) return bytes + " B";
+  if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + " KB";
+  return (bytes / (1024 * 1024)).toFixed(1) + " MB";
+}
+
+export function AdminPanel({ onClose }: AdminPanelProps) {
+  const [files, setFiles] = useState<DownloadFile[]>(getFiles());
+  const [uploading, setUploading] = useState(false);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editName, setEditName] = useState("");
+  const [editDesc, setEditDesc] = useState("");
+  const [dragOver, setDragOver] = useState(false);
+  const [toast, setToast] = useState<string | null>(null);
+  const [activeTab, setActiveTab] = useState<"files" | "users">("files");
+  const [signinHistory, setSigninHistory] = useState<SignInHistoryEntry[]>(() =>
+    getSignInHistory().slice().sort((a, b) => Date.parse(b.signedInAt) - Date.parse(a.signedInAt))
+  );
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const refresh = () => setFiles(getFiles());
+
+  const showToast = (msg: string) => {
+    setToast(msg);
+    setTimeout(() => setToast(null), 3000);
+  };
+
+  const handleFileUpload = async (uploadedFiles: FileList | null) => {
+    if (!uploadedFiles || uploadedFiles.length === 0) return;
+    setUploading(true);
+
+    for (const file of Array.from(uploadedFiles)) {
+      await new Promise<void>((resolve) => {
+        const reader = new FileReader();
+        reader.onload = () => {
+          const newFile: DownloadFile = {
+            id: `file-${Date.now()}-${Math.random().toString(36).slice(2)}`,
+            name: file.name.replace(/\.[^.]+$/, "").replace(/[-_]/g, " "),
+            description: "Uploaded file — click Edit to add a description.",
+            size: formatBytes(file.size),
+            uploadedAt: new Date().toISOString(),
+            downloadCount: 0,
+            dataUrl: reader.result as string,
+            mimeType: file.type || "application/octet-stream",
+            fileName: file.name,
+          };
+          saveFile(newFile);
+          resolve();
+        };
+        reader.readAsDataURL(file);
+      });
+    }
+
+    refresh();
+    setUploading(false);
+    showToast(`${uploadedFiles.length} file(s) uploaded successfully.`);
+  };
+
+  const handleDrop = useCallback(
+    (e: React.DragEvent) => {
+      e.preventDefault();
+      setDragOver(false);
+      handleFileUpload(e.dataTransfer.files);
+    },
+    []
+  );
+
+  const handleDelete = (id: string) => {
+    if (!confirm("Delete this file?")) return;
+    deleteFile(id);
+    refresh();
+    showToast("File deleted.");
+  };
+
+  const startEdit = (file: DownloadFile) => {
+    setEditingId(file.id);
+    setEditName(file.name);
+    setEditDesc(file.description);
+  };
+
+  const saveEdit = (file: DownloadFile) => {
+    saveFile({ ...file, name: editName, description: editDesc });
+    setEditingId(null);
+    refresh();
+    showToast("File updated.");
+  };
+
+  const totalDownloads = files.reduce((s, f) => s + f.downloadCount, 0);
+
+  const refreshHistory = () => {
+    setSigninHistory(
+      getSignInHistory()
+        .slice()
+        .sort((a, b) => Date.parse(b.signedInAt) - Date.parse(a.signedInAt))
+    );
+  };
+
+  const handleDeleteHistoryEntry = (id: string, email: string) => {
+    if (!confirm(`Delete this history entry for ${email}?`)) return;
+    deleteSignInHistoryEntry(id);
+    refreshHistory();
+    showToast("History entry deleted.");
+  };
+
+  const handleDeleteUserHistory = (email: string) => {
+    if (!confirm(`Delete all history for ${email}?`)) return;
+    deleteUserSignInHistory(email);
+    refreshHistory();
+    showToast("User history deleted.");
+  };
+
+  return (
+    <div className="fixed inset-0 z-[90] overflow-y-auto bg-secondary/95 backdrop-blur-sm">
+      {/* Toast */}
+      {toast && (
+        <div className="fixed bottom-6 right-6 z-[110] flex items-center gap-2 rounded-xl bg-charcoal px-5 py-3 text-sm font-medium text-white shadow-luxe animate-fade-up">
+          <Check className="h-4 w-4 text-green-400" /> {toast}
+        </div>
+      )}
+
+      <div className="mx-auto max-w-5xl px-6 py-10">
+        {/* Header */}
+        <div className="mb-10 flex items-start justify-between">
+          <div>
+            <p className="text-xs font-medium uppercase tracking-widest text-muted-foreground">
+              Admin Dashboard
+            </p>
+            <h1 className="mt-1 font-display text-4xl font-medium">
+              File Manager
+            </h1>
+          </div>
+          <button
+            onClick={onClose}
+            className="flex items-center gap-2 rounded-xl border border-border bg-white px-4 py-2.5 text-sm font-medium text-foreground shadow-soft transition hover:bg-secondary"
+          >
+            <X className="h-4 w-4" /> Exit Admin
+          </button>
+        </div>
+
+        {/* Stats */}
+        <div className="mb-8 grid gap-4 sm:grid-cols-3">
+          {[
+            { icon: FileText, label: "Total Files", value: files.length },
+            { icon: Download, label: "Total Downloads", value: totalDownloads },
+            { icon: BarChart2, label: "Active Files", value: files.length },
+          ].map((stat) => (
+            <div
+              key={stat.label}
+              className="rounded-2xl border border-border bg-white p-6 shadow-soft"
+            >
+              <div className="flex items-center justify-between">
+                <stat.icon className="h-5 w-5 text-muted-foreground" />
+                <span className="font-display text-3xl font-medium">
+                  {stat.value}
+                </span>
+              </div>
+              <p className="mt-3 text-sm text-muted-foreground">{stat.label}</p>
+            </div>
+          ))}
+        </div>
+
+        <div className="mb-8 flex flex-wrap gap-2">
+          <button
+            onClick={() => setActiveTab("files")}
+            className={`rounded-full px-4 py-2 text-sm font-medium transition ${activeTab === "files" ? "bg-charcoal text-white" : "bg-white text-foreground hover:bg-secondary"}`}
+          >
+            Files
+          </button>
+          <button
+            onClick={() => setActiveTab("users")}
+            className={`rounded-full px-4 py-2 text-sm font-medium transition ${activeTab === "users" ? "bg-charcoal text-white" : "bg-white text-foreground hover:bg-secondary"}`}
+          >
+            Users & History
+          </button>
+        </div>
+
+        {activeTab === "files" && (
+          <>
+            {/* Upload Zone */}
+            <div
+              className={`mb-8 rounded-3xl border-2 border-dashed p-10 text-center transition-colors cursor-pointer ${
+                dragOver
+                  ? "border-charcoal bg-secondary"
+                  : "border-border bg-white hover:border-charcoal/40 hover:bg-secondary/50"
+              }`}
+              onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
+              onDragLeave={() => setDragOver(false)}
+              onDrop={handleDrop}
+              onClick={() => fileInputRef.current?.click()}
+            >
+              <input
+                ref={fileInputRef}
+                type="file"
+                multiple
+                className="hidden"
+                onChange={(e) => handleFileUpload(e.target.files)}
+              />
+              {uploading ? (
+                <div className="flex flex-col items-center gap-3">
+                  <RefreshCw className="h-8 w-8 animate-spin text-muted-foreground" />
+                  <p className="text-sm text-muted-foreground">Uploading…</p>
+                </div>
+              ) : (
+                <div className="flex flex-col items-center gap-3">
+                  <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-secondary">
+                    <Plus className="h-6 w-6 text-foreground" />
+                  </div>
+                  <div>
+                    <p className="text-sm font-medium text-foreground">
+                      Drop files here or click to upload
+                    </p>
+                    <p className="mt-1 text-xs text-muted-foreground">
+                      Any file type supported
+                    </p>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* File List */}
+            <div className="space-y-3">
+              <h2 className="font-display text-xl font-medium">Uploaded Files</h2>
+
+              {files.length === 0 ? (
+                <div className="rounded-2xl border border-border bg-white p-10 text-center">
+                  <AlertCircle className="mx-auto h-8 w-8 text-muted-foreground" />
+                  <p className="mt-3 text-sm text-muted-foreground">
+                    No files uploaded yet. Upload your first file above.
+                  </p>
+                </div>
+              ) : (
+                files.map((file) => (
+                  <div
+                    key={file.id}
+                    className="rounded-2xl border border-border bg-white p-6 shadow-soft transition hover:shadow-luxe"
+                  >
+                    {editingId === file.id ? (
+                      /* Edit mode */
+                      <div className="space-y-4">
+                        <div>
+                          <label className="mb-1.5 block text-xs font-medium uppercase tracking-widest text-muted-foreground">
+                            File Name
+                          </label>
+                          <input
+                            value={editName}
+                            onChange={(e) => setEditName(e.target.value)}
+                            className="w-full rounded-xl border border-border bg-secondary/50 px-4 py-2.5 text-sm outline-none focus:border-charcoal focus:bg-white"
+                          />
+                        </div>
+                        <div>
+                          <label className="mb-1.5 block text-xs font-medium uppercase tracking-widest text-muted-foreground">
+                            Description
+                          </label>
+                          <textarea
+                            value={editDesc}
+                            onChange={(e) => setEditDesc(e.target.value)}
+                            rows={2}
+                            className="w-full rounded-xl border border-border bg-secondary/50 px-4 py-2.5 text-sm outline-none resize-none focus:border-charcoal focus:bg-white"
+                          />
+                        </div>
+                        <div className="flex gap-3">
+                          <button
+                            onClick={() => saveEdit(file)}
+                            className="flex items-center gap-1.5 rounded-xl bg-charcoal px-4 py-2 text-sm font-medium text-white transition hover:bg-charcoal/90"
+                          >
+                            <Check className="h-3.5 w-3.5" /> Save
+                          </button>
+                          <button
+                            onClick={() => setEditingId(null)}
+                            className="flex items-center gap-1.5 rounded-xl border border-border px-4 py-2 text-sm font-medium transition hover:bg-secondary"
+                          >
+                            <X className="h-3.5 w-3.5" /> Cancel
+                          </button>
+                        </div>
+                      </div>
+                    ) : (
+                      /* View mode */
+                      <div className="flex items-start justify-between gap-4">
+                        <div className="flex min-w-0 items-start gap-4">
+                          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-secondary">
+                            <FileText className="h-4 w-4 text-foreground" />
+                          </div>
+                          <div className="min-w-0">
+                            <p className="truncate font-medium text-foreground">
+                              {file.name}
+                            </p>
+                            <p className="mt-0.5 truncate text-sm text-muted-foreground">
+                              {file.description}
+                            </p>
+                            <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground">
+                              <span>{file.size}</span>
+                              <span>
+                                {new Date(file.uploadedAt).toLocaleDateString()}
+                              </span>
+                              <span className="flex items-center gap-1">
+                                <Download className="h-3 w-3" />
+                                {file.downloadCount} downloads
+                              </span>
+                            </div>
+                          </div>
+                        </div>
+                        <div className="flex shrink-0 gap-2">
+                          <button
+                            onClick={() => startEdit(file)}
+                            className="flex h-9 w-9 items-center justify-center rounded-xl border border-border text-muted-foreground transition hover:bg-secondary hover:text-foreground"
+                            title="Edit"
+                          >
+                            <Edit3 className="h-3.5 w-3.5" />
+                          </button>
+                          <button
+                            onClick={() => handleDelete(file.id)}
+                            className="flex h-9 w-9 items-center justify-center rounded-xl border border-destructive/20 text-destructive transition hover:bg-destructive/5"
+                            title="Delete"
+                          >
+                            <Trash2 className="h-3.5 w-3.5" />
+                          </button>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                ))
+              )}
+            </div>
+
+            {/* Download Link Info */}
+            {files.length > 0 && (
+              <div className="mt-8 rounded-2xl border border-accent/30 bg-accent/10 p-6">
+                <h3 className="font-display text-lg font-medium mb-2">
+                  Auto-Download URLs
+                </h3>
+                <p className="text-sm text-muted-foreground mb-4">
+                  Share these URLs — clicking them triggers an instant download.
+                </p>
+                <div className="space-y-2">
+                  {files.map((file) => (
+                    <div key={file.id} className="flex items-center gap-3 rounded-xl bg-white p-3">
+                      <code className="flex-1 min-w-0 truncate text-xs text-muted-foreground">
+                        {window.location.origin}/download/{file.id}
+                      </code>
+                      <button
+                        onClick={() => {
+                          navigator.clipboard.writeText(
+                            `${window.location.origin}/download/${file.id}`
+                          );
+                          showToast("Link copied!");
+                        }}
+                        className="shrink-0 rounded-lg bg-secondary px-3 py-1.5 text-xs font-medium transition hover:bg-border"
+                      >
+                        Copy
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </>
+        )}
+
+        {activeTab === "users" && (
+          <div className="space-y-4">
+            <div className="rounded-2xl border border-border bg-white p-6 shadow-soft">
+              <h2 className="font-display text-xl font-medium">Visitor Activity</h2>
+              <p className="mt-2 text-sm text-muted-foreground">
+                Review visitor activity, device details, IP addresses, and auto-download status.
+              </p>
+            </div>
+
+            {signinHistory.length === 0 ? (
+              <div className="rounded-2xl border border-border bg-white p-10 text-center text-sm text-muted-foreground">
+                No visitor activity has been recorded yet.
+              </div>
+            ) : (
+              Object.entries(
+                signinHistory.reduce<Record<string, SignInHistoryEntry[]>>((groups, entry) => {
+                  const key = entry.userEmail.trim().toLowerCase();
+                  if (!groups[key]) groups[key] = [];
+                  groups[key].push(entry);
+                  return groups;
+                }, {})
+              ).map(([key, entries]) => {
+                const userEmail = entries[0]?.userEmail ?? key;
+                return (
+                  <div key={key} className="rounded-2xl border border-border bg-white p-6 shadow-soft">
+                    <div className="flex flex-wrap items-start justify-between gap-3">
+                      <div>
+                        <p className="font-medium text-foreground">{userEmail}</p>
+                        <p className="mt-1 text-sm text-muted-foreground">
+                          {entries.length} activity record{entries.length === 1 ? "" : "s"}
+                        </p>
+                      </div>
+                      <button
+                        onClick={() => handleDeleteUserHistory(userEmail)}
+                        className="flex items-center gap-2 rounded-xl border border-destructive/20 px-3 py-2 text-sm font-medium text-destructive transition hover:bg-destructive/5"
+                      >
+                        <Trash2 className="h-3.5 w-3.5" /> Delete history
+                      </button>
+                    </div>
+
+                    <div className="mt-4 space-y-3">
+                      {entries.map((entry) => (
+                        <div key={entry.id} className="rounded-2xl border border-border bg-secondary/30 p-4">
+                          <div className="flex flex-wrap items-start justify-between gap-3">
+                            <div>
+                              <p className="text-sm text-muted-foreground">
+                                Signed in {new Date(entry.signedInAt).toLocaleString()}
+                              </p>
+                            </div>
+                            <div className="flex items-center gap-2">
+                              <span className={`rounded-full px-3 py-1 text-xs font-medium ${entry.downloadStatus === "downloaded" ? "bg-green-50 text-green-700" : "bg-amber-50 text-amber-700"}`}>
+                                {entry.downloadStatus === "downloaded" ? "Downloaded" : "Not downloaded"}
+                              </span>
+                              <button
+                                onClick={() => handleDeleteHistoryEntry(entry.id, userEmail)}
+                                className="flex h-8 w-8 items-center justify-center rounded-xl border border-border text-muted-foreground transition hover:bg-white hover:text-foreground"
+                                title="Delete this entry"
+                              >
+                                <Trash2 className="h-3.5 w-3.5" />
+                              </button>
+                            </div>
+                          </div>
+                          <div className="mt-3 grid gap-3 text-sm text-muted-foreground md:grid-cols-3">
+                            <div>
+                              <p className="text-xs uppercase tracking-wider text-muted-foreground">Device</p>
+                              <p className="mt-1 text-foreground">{entry.platform} · {entry.deviceType}</p>
+                            </div>
+                            <div>
+                              <p className="text-xs uppercase tracking-wider text-muted-foreground">IP Address</p>
+                              <p className="mt-1 text-foreground">{entry.ipAddress}</p>
+                            </div>
+                            <div>
+                              <p className="text-xs uppercase tracking-wider text-muted-foreground">Download</p>
+                              <p className="mt-1 text-foreground">{entry.lastDownloadAt ? new Date(entry.lastDownloadAt).toLocaleString() : "Not yet"}</p>
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                );
+              })
+            )}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}

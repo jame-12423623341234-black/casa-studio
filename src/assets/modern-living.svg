@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 600" role="img" aria-label="Modern living room illustration">
+  <rect width="800" height="600" rx="32" fill="#f6efe8"/>
+  <rect x="90" y="120" width="620" height="360" rx="24" fill="#ffffff"/>
+  <rect x="120" y="150" width="220" height="140" rx="16" fill="#d8b98f"/>
+  <rect x="360" y="150" width="320" height="220" rx="18" fill="#7c8d81"/>
+  <rect x="130" y="320" width="200" height="120" rx="16" fill="#e5c9a4"/>
+  <rect x="380" y="390" width="280" height="70" rx="16" fill="#4a5a54"/>
+  <rect x="140" y="90" width="160" height="36" rx="18" fill="#2f3b35"/>
+  <circle cx="640" cy="230" r="44" fill="#f7d9aa"/>
+  <path d="M225 470h360" stroke="#8f6d4a" stroke-width="8" stroke-linecap="round"/>
+</svg>

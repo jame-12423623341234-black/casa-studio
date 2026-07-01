@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 600" role="img" aria-label="Outdoor terrace illustration">
+  <rect width="800" height="600" rx="32" fill="#eef5f0"/>
+  <rect x="90" y="120" width="620" height="360" rx="24" fill="#fdfcf8"/>
+  <rect x="140" y="190" width="220" height="180" rx="20" fill="#8fa883"/>
+  <rect x="390" y="180" width="250" height="220" rx="20" fill="#c9aa7b"/>
+  <path d="M180 420c50 30 110 30 160 0" stroke="#6d4a2d" stroke-width="10" fill="none" stroke-linecap="round"/>
+  <path d="M430 420c45 30 100 30 150 0" stroke="#4f6058" stroke-width="10" fill="none" stroke-linecap="round"/>
+  <rect x="170" y="90" width="180" height="36" rx="18" fill="#2f3b35"/>
+</svg>
