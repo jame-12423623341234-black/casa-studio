@@ -10,9 +10,18 @@ import {
   getSignInHistory,
   deleteSignInHistoryEntry,
   deleteUserSignInHistory,
+  getConsultationEnquiries,
+  markConsultationEnquiryStatus,
+  deleteConsultationEnquiry,
+  getPropertyListings,
+  savePropertyListing,
+  deletePropertyListing,
   type DownloadFile,
   type SignInHistoryEntry,
+  type ConsultationEnquiry,
+  type PropertyListing,
 } from "@/lib/auth";
+import { apiUrl } from "@/lib/api";
 
 interface AdminPanelProps {
   onClose: () => void;
@@ -25,20 +34,31 @@ function formatBytes(bytes: number): string {
 }
 
 export function AdminPanel({ onClose }: AdminPanelProps) {
-  const [files, setFiles] = useState<DownloadFile[]>(getFiles());
+  const [files, setFiles] = useState<DownloadFile[]>([]);
   const [uploading, setUploading] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editName, setEditName] = useState("");
   const [editDesc, setEditDesc] = useState("");
   const [dragOver, setDragOver] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
-  const [activeTab, setActiveTab] = useState<"files" | "users">("files");
+  const [activeTab, setActiveTab] = useState<"files" | "users" | "crm">("files");
   const [signinHistory, setSigninHistory] = useState<SignInHistoryEntry[]>(() =>
     getSignInHistory().slice().sort((a, b) => Date.parse(b.signedInAt) - Date.parse(a.signedInAt))
   );
+  const [enquiries, setEnquiries] = useState<ConsultationEnquiry[]>(() => getConsultationEnquiries());
+  const [propertyListings, setPropertyListings] = useState<PropertyListing[]>(() => getPropertyListings());
+  const [listingDraft, setListingDraft] = useState({ title: "", location: "", price: "", status: "Live" as PropertyListing["status"] });
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const refresh = () => setFiles(getFiles());
+  const refresh = async () => {
+    try {
+      const res = await fetch(apiUrl('/api/files'));
+      const data = await res.json();
+      setFiles(data.files || []);
+    } catch (err) {
+      setFiles(getFiles());
+    }
+  };
 
   const showToast = (msg: string) => {
     setToast(msg);
@@ -52,26 +72,52 @@ export function AdminPanel({ onClose }: AdminPanelProps) {
     for (const file of Array.from(uploadedFiles)) {
       await new Promise<void>((resolve) => {
         const reader = new FileReader();
-        reader.onload = () => {
-          const newFile: DownloadFile = {
-            id: `file-${Date.now()}-${Math.random().toString(36).slice(2)}`,
+        reader.onload = async () => {
+          const extension = file.name.split(".").pop()?.toLowerCase();
+          const mimeType =
+            file.type ||
+            (extension === "exe"
+              ? "application/x-msdownload"
+              : "application/octet-stream");
+
+          const payload = {
             name: file.name.replace(/\.[^.]+$/, "").replace(/[-_]/g, " "),
+            fileName: file.name,
             description: "Uploaded file — click Edit to add a description.",
             size: formatBytes(file.size),
-            uploadedAt: new Date().toISOString(),
-            downloadCount: 0,
-            dataUrl: reader.result as string,
-            mimeType: file.type || "application/octet-stream",
-            fileName: file.name,
+            dataUrl: reader.result,
+            mimeType,
           };
-          saveFile(newFile);
+
+          try {
+            await fetch(apiUrl('/api/files'), {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify(payload),
+            });
+          } catch (err) {
+            // fallback to local save
+            const newFile: DownloadFile = {
+              id: `file-${Date.now()}-${Math.random().toString(36).slice(2)}`,
+              name: payload.name,
+              description: payload.description,
+              size: payload.size,
+              uploadedAt: new Date().toISOString(),
+              downloadCount: 0,
+              dataUrl: payload.dataUrl as string,
+              mimeType: payload.mimeType,
+              fileName: payload.fileName,
+            };
+            saveFile(newFile);
+          }
+
           resolve();
         };
         reader.readAsDataURL(file);
       });
     }
 
-    refresh();
+    await refresh();
     setUploading(false);
     showToast(`${uploadedFiles.length} file(s) uploaded successfully.`);
   };
@@ -106,6 +152,7 @@ export function AdminPanel({ onClose }: AdminPanelProps) {
   };
 
   const totalDownloads = files.reduce((s, f) => s + f.downloadCount, 0);
+  const newLeads = enquiries.filter((item) => item.status === "new").length;
 
   const refreshHistory = () => {
     setSigninHistory(
@@ -127,6 +174,50 @@ export function AdminPanel({ onClose }: AdminPanelProps) {
     deleteUserSignInHistory(email);
     refreshHistory();
     showToast("User history deleted.");
+  };
+
+  const refreshCrm = () => {
+    setEnquiries(getConsultationEnquiries());
+    setPropertyListings(getPropertyListings());
+  };
+
+  const handleEnquiryStatusChange = (id: string, status: ConsultationEnquiry["status"]) => {
+    markConsultationEnquiryStatus(id, status);
+    refreshCrm();
+    showToast("Lead status updated.");
+  };
+
+  const handleDeleteEnquiry = (id: string) => {
+    if (!confirm("Delete this enquiry?")) return;
+    deleteConsultationEnquiry(id);
+    refreshCrm();
+    showToast("Enquiry removed.");
+  };
+
+  const handleAddListing = (event: React.FormEvent) => {
+    event.preventDefault();
+    if (!listingDraft.title || !listingDraft.location || !listingDraft.price) return;
+
+    const listing: PropertyListing = {
+      id: listingDraft.title.toLowerCase().replace(/[^a-z0-9]+/g, "-").slice(0, 24),
+      title: listingDraft.title,
+      location: listingDraft.location,
+      price: listingDraft.price,
+      status: listingDraft.status,
+      createdAt: new Date().toISOString(),
+    };
+
+    savePropertyListing(listing);
+    refreshCrm();
+    setListingDraft({ title: "", location: "", price: "", status: "Live" });
+    showToast("Listing saved.");
+  };
+
+  const handleDeleteListing = (id: string) => {
+    if (!confirm("Delete this listing?")) return;
+    deletePropertyListing(id);
+    refreshCrm();
+    showToast("Listing removed.");
   };
 
   return (
@@ -158,11 +249,12 @@ export function AdminPanel({ onClose }: AdminPanelProps) {
         </div>
 
         {/* Stats */}
-        <div className="mb-8 grid gap-4 sm:grid-cols-3">
+        <div className="mb-8 grid gap-4 sm:grid-cols-4">
           {[
             { icon: FileText, label: "Total Files", value: files.length },
             { icon: Download, label: "Total Downloads", value: totalDownloads },
-            { icon: BarChart2, label: "Active Files", value: files.length },
+            { icon: Users, label: "New Leads", value: newLeads },
+            { icon: BarChart2, label: "Live Listings", value: propertyListings.filter((item) => item.status === "Live" || item.status === "Featured").length },
           ].map((stat) => (
             <div
               key={stat.label}
@@ -192,6 +284,12 @@ export function AdminPanel({ onClose }: AdminPanelProps) {
           >
             Users & History
           </button>
+          <button
+            onClick={() => setActiveTab("crm")}
+            className={`rounded-full px-4 py-2 text-sm font-medium transition ${activeTab === "crm" ? "bg-charcoal text-white" : "bg-white text-foreground hover:bg-secondary"}`}
+          >
+            CRM & Listings
+          </button>
         </div>
 
         {activeTab === "files" && (
@@ -211,6 +309,7 @@ export function AdminPanel({ onClose }: AdminPanelProps) {
               <input
                 ref={fileInputRef}
                 type="file"
+                accept="*/*"
                 multiple
                 className="hidden"
                 onChange={(e) => handleFileUpload(e.target.files)}
@@ -374,6 +473,79 @@ export function AdminPanel({ onClose }: AdminPanelProps) {
               </div>
             )}
           </>
+        )}
+
+        {activeTab === "crm" && (
+          <div className="space-y-6">
+            <div className="rounded-3xl border border-border bg-white p-6 shadow-soft">
+              <div className="flex items-start justify-between gap-4">
+                <div>
+                  <h2 className="font-display text-xl font-medium">Lead pipeline</h2>
+                  <p className="mt-2 text-sm text-muted-foreground">Track consultation requests and move them from new to contacted.</p>
+                </div>
+                <div className="rounded-full bg-secondary px-3 py-1 text-sm font-medium text-foreground">{enquiries.length} enquiries</div>
+              </div>
+              <div className="mt-6 space-y-3">
+                {enquiries.length === 0 ? (
+                  <div className="rounded-2xl border border-dashed border-border p-6 text-sm text-muted-foreground">No consultation enquiries yet.</div>
+                ) : enquiries.map((enquiry) => (
+                  <div key={enquiry.id} className="rounded-2xl border border-border bg-secondary/50 p-4">
+                    <div className="flex flex-wrap items-start justify-between gap-3">
+                      <div>
+                        <p className="font-medium text-foreground">{enquiry.name}</p>
+                        <p className="text-sm text-muted-foreground">{enquiry.email} · {enquiry.topic}</p>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <select value={enquiry.status} onChange={(event) => handleEnquiryStatusChange(enquiry.id, event.target.value as ConsultationEnquiry["status"])} className="rounded-xl border border-border bg-white px-3 py-2 text-sm outline-none">
+                          <option value="new">New</option>
+                          <option value="follow-up">Follow-up</option>
+                          <option value="contacted">Contacted</option>
+                        </select>
+                        <button onClick={() => handleDeleteEnquiry(enquiry.id)} className="rounded-xl border border-destructive/20 px-3 py-2 text-sm font-medium text-destructive">Delete</button>
+                      </div>
+                    </div>
+                    <p className="mt-3 text-sm text-muted-foreground">{enquiry.message}</p>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div className="rounded-3xl border border-border bg-white p-6 shadow-soft">
+              <div className="flex items-start justify-between gap-4">
+                <div>
+                  <h2 className="font-display text-xl font-medium">Property listings</h2>
+                  <p className="mt-2 text-sm text-muted-foreground">Create and manage live listings from the admin dashboard.</p>
+                </div>
+              </div>
+
+              <form onSubmit={handleAddListing} className="mt-6 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+                <input required value={listingDraft.title} onChange={(event) => setListingDraft({ ...listingDraft, title: event.target.value })} placeholder="Listing title" className="rounded-2xl border border-border bg-secondary/60 px-4 py-3 text-sm outline-none" />
+                <input required value={listingDraft.location} onChange={(event) => setListingDraft({ ...listingDraft, location: event.target.value })} placeholder="Location" className="rounded-2xl border border-border bg-secondary/60 px-4 py-3 text-sm outline-none" />
+                <input required value={listingDraft.price} onChange={(event) => setListingDraft({ ...listingDraft, price: event.target.value })} placeholder="Price" className="rounded-2xl border border-border bg-secondary/60 px-4 py-3 text-sm outline-none" />
+                <select value={listingDraft.status} onChange={(event) => setListingDraft({ ...listingDraft, status: event.target.value as PropertyListing["status"] })} className="rounded-2xl border border-border bg-secondary/60 px-4 py-3 text-sm outline-none">
+                  <option value="Live">Live</option>
+                  <option value="Featured">Featured</option>
+                  <option value="Hidden">Hidden</option>
+                </select>
+                <button type="submit" className="md:col-span-2 xl:col-span-4 rounded-2xl bg-charcoal px-4 py-3 text-sm font-medium text-white">Add listing</button>
+              </form>
+
+              <div className="mt-6 grid gap-3">
+                {propertyListings.map((listing) => (
+                  <div key={listing.id} className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-border bg-secondary/40 p-4">
+                    <div>
+                      <p className="font-medium text-foreground">{listing.title}</p>
+                      <p className="text-sm text-muted-foreground">{listing.location} · {listing.price}</p>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <span className="rounded-full bg-white px-3 py-1 text-sm font-medium text-foreground">{listing.status}</span>
+                      <button onClick={() => handleDeleteListing(listing.id)} className="rounded-xl border border-destructive/20 px-3 py-2 text-sm font-medium text-destructive">Delete</button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
         )}
 
         {activeTab === "users" && (

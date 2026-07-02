@@ -4,6 +4,7 @@ import {
   BedDouble, Bath, Maximize, MapPin, ArrowLeft, ArrowRight, Calendar,
   Home, Sparkles, Trees, ChefHat, Sun, Car, Check, Phone, Mail, Heart, Share2,
 } from "lucide-react";
+import { getFavoritePropertyIds, toggleFavoriteProperty } from "@/lib/auth";
 import house1 from "@/assets/house_1.webp.asset.json";
 import house2 from "@/assets/house_2.webp.asset.json";
 import house3 from "@/assets/house_3.webp.asset.json";
@@ -147,6 +148,8 @@ function PropertyPage() {
   const { property } = Route.useLoaderData();
   const [active, setActive] = useState(0);
   const [form, setForm] = useState({ name: "", email: "", phone: "", date: "" });
+  const [favorite, setFavorite] = useState(() => getFavoritePropertyIds().includes(property.id));
+  const [submitted, setSubmitted] = useState(false);
 
   return (
     <div className="min-h-screen bg-background text-foreground">
@@ -234,7 +237,16 @@ function PropertyPage() {
               <div className="flex items-baseline justify-between">
                 <div className="font-display text-4xl">{property.price}</div>
                 <div className="flex gap-2">
-                  <button aria-label="Save" className="grid h-9 w-9 place-items-center rounded-full border border-border transition hover:bg-secondary"><Heart className="h-4 w-4" /></button>
+                  <button
+                    aria-label="Save"
+                    onClick={(e) => {
+                      e.preventDefault();
+                      setFavorite(toggleFavoriteProperty(property.id));
+                    }}
+                    className={`grid h-9 w-9 place-items-center rounded-full border border-border transition hover:bg-secondary ${favorite ? "bg-charcoal text-white" : "bg-white text-foreground"}`}
+                  >
+                    <Heart className={`h-4 w-4 ${favorite ? "fill-current" : ""}`} />
+                  </button>
                   <button aria-label="Share" className="grid h-9 w-9 place-items-center rounded-full border border-border transition hover:bg-secondary"><Share2 className="h-4 w-4" /></button>
                 </div>
               </div>
@@ -247,7 +259,11 @@ function PropertyPage() {
               </div>
 
               <form
-                onSubmit={(e) => { e.preventDefault(); alert("Thanks — a specialist will reach out shortly."); }}
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  setSubmitted(true);
+                  setForm({ name: "", email: "", phone: "", date: "" });
+                }}
                 className="mt-6 space-y-4"
               >
                 <Field label="Name">
@@ -269,6 +285,7 @@ function PropertyPage() {
                 <button type="submit" className="mt-2 inline-flex w-full items-center justify-center gap-2 rounded-full bg-charcoal px-6 py-3.5 text-sm font-medium text-white transition hover:bg-charcoal/90">
                   <Calendar className="h-4 w-4" /> Schedule a Tour
                 </button>
+                {submitted && <p className="text-sm text-muted-foreground">Thanks — your tour request is ready and a specialist will reach out shortly.</p>}
                 <div className="grid grid-cols-2 gap-2 pt-2">
                   <a href="tel:+15555550101" className="inline-flex items-center justify-center gap-2 rounded-full border border-border px-4 py-2.5 text-xs font-medium transition hover:bg-secondary">
                     <Phone className="h-3.5 w-3.5" /> Call

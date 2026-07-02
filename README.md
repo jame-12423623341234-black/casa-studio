@@ -29,14 +29,22 @@ A modern, polished house design studio website with Gmail authentication, OTP ve
 - Clean card grid for services, work portfolio, testimonials
 - Resources section showing available downloads
 
+## Project Structure
+
+- Frontend: the Vite + React + TanStack app in the root source tree, responsible for the public site UI and admin dashboard.
+- Backend: the Express API in the backend folder, responsible for file uploads, downloads, and consultation email delivery.
+
 ## Getting Started
 
 ```bash
 # Install dependencies
-bun install
+npm install
 
-# Start dev server
-bun run dev
+# Start the frontend
+npm run dev:frontend
+
+# Start the backend API in a second terminal
+npm run dev:backend
 ```
 
 ## Admin Access
@@ -50,6 +58,26 @@ When signed in as admin, a gear icon appears in the user menu to open the Admin 
 - Replace the demo OTP display with an actual email service (SendGrid, Resend, etc.)
 - File uploads should go to cloud storage (S3, Cloudflare R2) rather than `localStorage`
 - The `/download/:fileId` route should verify auth server-side and serve a signed URL
+
+## Hosting Setup
+
+For a production deployment, host the frontend and backend separately:
+
+- Frontend: Vercel / Netlify / any static host for the Vite app
+- Backend API: Railway / Render / Fly.io for the Express API in the backend folder
+
+Set this environment variable on the frontend app:
+
+```bash
+VITE_API_BASE_URL=https://your-backend-domain.com
+```
+
+Set these on the backend service:
+
+```bash
+RESEND_API_KEY=your_resend_key
+UPLOADS_DIR=/app/.uploads
+```
 
 ## Tech Stack
 

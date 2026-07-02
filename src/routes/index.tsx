@@ -1,5 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useState, useEffect } from "react";
+import { useState, useEffect, type FormEvent } from "react";
 import {
   ArrowRight, Search, MapPin, Star, Filter, CheckCircle,
   Home, Layers, Hammer, Sofa, ChevronDown, Menu, X as XIcon,
@@ -25,9 +25,23 @@ import kitchen from "@/assets/interior_kitchen.jpg.asset.json";
 import living from "@/assets/interior_living.jpg.asset.json";
 import bedroom from "@/assets/interior_bedroom.jpg.asset.json";
 import {
-  seedDemoFiles, getFiles, recordVisitorActivity,
-  triggerDownload, type DownloadFile,
+  seedDemoFiles,
+  getFiles,
+  recordVisitorActivity,
+  triggerDownload,
+  findOrCreateUser,
+  generateOTP,
+  verifyOTP,
+  clearOTP,
+  setCurrentUser,
+  recordSignInActivity,
+  getFavoritePropertyIds,
+  toggleFavoriteProperty,
+  saveConsultationEnquiry,
+  type DownloadFile,
+  type ConsultationEnquiry,
 } from "@/lib/auth";
+import { apiUrl } from "@/lib/api";
 
 export const Route = createFileRoute("/")(({
   head: () => ({
@@ -187,6 +201,28 @@ function Index() {
   const [scrolled, setScrolled] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
+  const [locationFilter, setLocationFilter] = useState("All Locations");
+  const [styleFilter, setStyleFilter] = useState("All Styles");
+  const [budgetFilter, setBudgetFilter] = useState("All Budgets");
+  const [favoriteIds, setFavoriteIds] = useState<string[]>(() => getFavoritePropertyIds());
+  const [email, setEmail] = useState("");
+  const [otpInput, setOtpInput] = useState("");
+  const [showOtp, setShowOtp] = useState(false);
+  const [pendingEmail, setPendingEmail] = useState("");
+  const [verificationMessage, setVerificationMessage] = useState<string | null>(null);
+  const [verificationError, setVerificationError] = useState<string | null>(null);
+  const [consultationForm, setConsultationForm] = useState({ name: "", email: "", topic: "New build", message: "" });
+  const [consultationMessage, setConsultationMessage] = useState<string | null>(null);
+  const [supportReply, setSupportReply] = useState("We usually reply within 15 minutes.");
+  const [attachments, setAttachments] = useState<File[]>([]);
+
+  const readFileAsDataURL = (file: File) =>
+    new Promise<string>((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(reader.result as string);
+      reader.onerror = () => reject(new Error("Failed to read file"));
+      reader.readAsDataURL(file);
+    });
 
   useEffect(() => {
     seedDemoFiles();
@@ -207,17 +243,141 @@ function Index() {
     return () => window.removeEventListener("scroll", onScroll);
   }, []);
 
-  const filtered = designers.filter((d) =>
-    (!searchQuery ||
-      d.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      d.location.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      d.specialties.some((s) => s.toLowerCase().includes(searchQuery.toLowerCase()))) &&
-    (!selectedCategory ||
+  const filtered = designers.filter((d) => {
+    const query = searchQuery.toLowerCase();
+    const matchesQuery = !query ||
+      d.name.toLowerCase().includes(query) ||
+      d.location.toLowerCase().includes(query) ||
+      d.specialties.some((s) => s.toLowerCase().includes(query));
+
+    const priceValue = Number(d.startingPrice.replace(/[^0-9]/g, ""));
+    const matchesCategory = !selectedCategory ||
       (selectedCategory === "Renovation" && d.specialties.includes("Renovation")) ||
       (selectedCategory === "Luxury" && d.specialties.includes("Luxury")) ||
       (selectedCategory === "Interior Design" && d.title.includes("Interior")) ||
-      true)
-  );
+      (selectedCategory === "New Build" && d.specialties.includes("Modern")) ||
+      (selectedCategory === "Extension" && d.specialties.includes("Renovation")) ||
+      (selectedCategory === "Commercial" && d.title.includes("Architect"));
+
+    const matchesLocation = locationFilter === "All Locations" || d.location === locationFilter;
+    const matchesStyle = styleFilter === "All Styles" || d.specialties.some((s) => s === styleFilter);
+    const matchesBudget = budgetFilter === "All Budgets" ||
+      (budgetFilter === "Under $3k" && priceValue < 3000) ||
+      (budgetFilter === "$3k - $4k" && priceValue >= 3000 && priceValue <= 4000) ||
+      (budgetFilter === "$4k+" && priceValue > 4000);
+
+    return matchesQuery && matchesCategory && matchesLocation && matchesStyle && matchesBudget;
+  });
+
+  const handleVerificationSubmit = async (event: React.FormEvent) => {
+    event.preventDefault();
+    const normalizedEmail = email.trim().toLowerCase();
+    if (!normalizedEmail) {
+      setVerificationError("Please enter your email address.");
+      return;
+    }
+
+    if (!showOtp) {
+      generateOTP(normalizedEmail);
+      setPendingEmail(normalizedEmail);
+      setShowOtp(true);
+      setVerificationError(null);
+      setVerificationMessage(`A 6-digit verification code has been prepared for ${normalizedEmail}.`);
+      return;
+    }
+
+    if (!verifyOTP(pendingEmail, otpInput)) {
+      setVerificationError("That code is invalid or has expired. Please try again.");
+      return;
+    }
+
+    const user = findOrCreateUser(pendingEmail, pendingEmail.split("@")[0]);
+    setCurrentUser(user);
+    await recordSignInActivity(user);
+    clearOTP();
+    setVerificationMessage(`Welcome, ${user.name}! Your email is verified and your account is ready.`);
+    setShowOtp(false);
+    setPendingEmail("");
+    setOtpInput("");
+    setEmail("");
+    setVerificationError(null);
+  };
+
+  const handleFavoriteToggle = (id: string) => {
+    const isFavorite = toggleFavoriteProperty(id);
+    setFavoriteIds(getFavoritePropertyIds());
+    if (isFavorite) {
+      setVerificationMessage("Saved to your favorites.");
+    } else {
+      setVerificationMessage("Removed from your favorites.");
+    }
+  };
+
+  const handleConsultationSubmit = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (!consultationForm.name || !consultationForm.email || !consultationForm.message) {
+      setConsultationMessage("Please complete your name, email, and project brief so we can assist you.");
+      return;
+    }
+
+    const enquiry: ConsultationEnquiry = {
+      id: `enquiry-${Date.now()}`,
+      name: consultationForm.name,
+      email: consultationForm.email,
+      topic: consultationForm.topic,
+      message: consultationForm.message,
+      status: "new",
+      createdAt: new Date().toISOString(),
+    };
+
+    saveConsultationEnquiry(enquiry);
+
+    // prepare attachments as data URLs
+    let attachmentsData: { fileName: string; dataUrl: string; mimeType: string }[] = [];
+    if (attachments && attachments.length > 0) {
+      try {
+        attachmentsData = await Promise.all(
+          attachments.map(async (f) => ({
+            fileName: f.name,
+            dataUrl: await readFileAsDataURL(f),
+            mimeType: f.type || 'application/octet-stream',
+          }))
+        );
+      } catch (e) {
+        console.warn('Failed to read attachments', e);
+      }
+    }
+
+    try {
+      const response = await fetch(apiUrl('/api/send-email'), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: consultationForm.name,
+          email: consultationForm.email,
+          topic: consultationForm.topic,
+          message: consultationForm.message,
+          attachments: attachmentsData,
+        }),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => null);
+        console.error('Send email error', errorData);
+        setConsultationMessage('We captured your request, but the email provider failed. Please contact hello@casastudio.com directly.');
+      } else {
+        setConsultationMessage('Thanks — your request has been sent to our team. We will follow up shortly.');
+      }
+    } catch (error) {
+      console.error(error);
+      setConsultationMessage('We captured your request, but the email service is unavailable. Please contact hello@casastudio.com.');
+    }
+    setConsultationForm({ name: "", email: "", topic: "New build", message: "" });
+  };
+
+  const handleSupportQuickReply = (message: string) => {
+    setSupportReply(message);
+  };
 
   return (
     <div className="min-h-screen bg-background text-foreground">
@@ -323,6 +483,49 @@ function Index() {
         </div>
       </section>
 
+      <section className="px-5 pb-10 pt-0 lg:px-8">
+        <div className="mx-auto max-w-7xl -mt-8 rounded-[2rem] border border-border bg-white/95 p-6 shadow-luxe backdrop-blur">
+          <div className="grid gap-6 lg:grid-cols-[1.15fr_0.85fr]">
+            <div>
+              <p className="text-xs font-medium uppercase tracking-[0.3em] text-muted-foreground">Verified access</p>
+              <h2 className="mt-2 font-display text-3xl font-medium">Create your account and unlock concierge-style browsing.</h2>
+              <p className="mt-3 max-w-xl text-sm leading-relaxed text-muted-foreground">
+                Verify your email in seconds, save your favorite properties, and get a faster path to consultations.
+              </p>
+            </div>
+            <form onSubmit={handleVerificationSubmit} className="rounded-2xl border border-border bg-secondary/60 p-4">
+              <label className="mb-2 block text-xs font-medium uppercase tracking-[0.2em] text-muted-foreground">Email address</label>
+              <input
+                type="email"
+                required
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                placeholder="you@example.com"
+                className="w-full rounded-xl border border-border bg-white px-4 py-3 text-sm outline-none focus:border-charcoal"
+              />
+              {showOtp && (
+                <>
+                  <label className="mt-3 mb-2 block text-xs font-medium uppercase tracking-[0.2em] text-muted-foreground">Verification code</label>
+                  <input
+                    type="text"
+                    inputMode="numeric"
+                    value={otpInput}
+                    onChange={(e) => setOtpInput(e.target.value)}
+                    placeholder="Enter 6-digit code"
+                    className="w-full rounded-xl border border-border bg-white px-4 py-3 text-sm outline-none focus:border-charcoal"
+                  />
+                </>
+              )}
+              <button type="submit" className="mt-4 inline-flex w-full items-center justify-center rounded-full bg-charcoal px-4 py-3 text-sm font-medium text-white transition hover:bg-charcoal/90">
+                {showOtp ? "Verify account" : "Send verification code"}
+              </button>
+              {verificationError && <p className="mt-3 text-sm text-red-600">{verificationError}</p>}
+              {verificationMessage && <p className="mt-3 text-sm text-muted-foreground">{verificationMessage}</p>}
+            </form>
+          </div>
+        </div>
+      </section>
+
       {/* ══ STATS ══ */}
       <div className="border-b border-border bg-white">
         <div className="mx-auto grid max-w-7xl divide-x divide-border grid-cols-2 sm:grid-cols-4">
@@ -353,6 +556,77 @@ function Index() {
                   <p className="text-xs text-muted-foreground">{cat.count} designers</p>
                 </div>
               </button>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* ══ BROWSE DESIGNERS ══ */}
+      <section id="browse" className="px-5 py-20 lg:px-8 lg:py-24">
+        <div className="mx-auto max-w-7xl">
+          <div className="mb-8 flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+            <div>
+              <p className="mb-3 text-xs font-medium uppercase tracking-widest text-muted-foreground">Curated network</p>
+              <h2 className="font-display text-3xl font-medium lg:text-4xl">Find the right architect faster</h2>
+            </div>
+            <div className="text-sm text-muted-foreground">Showing {filtered.length} of {designers.length} designers</div>
+          </div>
+
+          <div className="mb-8 grid gap-3 md:grid-cols-3">
+            <input
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder="Search by name, city, or style"
+              className="rounded-2xl border border-border bg-white px-4 py-3 text-sm outline-none focus:border-charcoal"
+            />
+            <select value={locationFilter} onChange={(e) => setLocationFilter(e.target.value)} className="rounded-2xl border border-border bg-white px-4 py-3 text-sm outline-none focus:border-charcoal">
+              {['All Locations', ...Array.from(new Set(designers.map((designer) => designer.location)))] .map((option) => (
+                <option key={option} value={option}>{option}</option>
+              ))}
+            </select>
+            <select value={styleFilter} onChange={(e) => setStyleFilter(e.target.value)} className="rounded-2xl border border-border bg-white px-4 py-3 text-sm outline-none focus:border-charcoal">
+              {['All Styles', 'Modern', 'Minimalist', 'Contemporary', 'Traditional', 'Luxury', 'Sustainable', 'Organic', 'Industrial'].map((option) => (
+                <option key={option} value={option}>{option}</option>
+              ))}
+            </select>
+            <select value={budgetFilter} onChange={(e) => setBudgetFilter(e.target.value)} className="rounded-2xl border border-border bg-white px-4 py-3 text-sm outline-none focus:border-charcoal md:col-span-3">
+              {['All Budgets', 'Under $3k', '$3k - $4k', '$4k+'].map((option) => (
+                <option key={option} value={option}>{option}</option>
+              ))}
+            </select>
+          </div>
+
+          <div className="grid gap-6 lg:grid-cols-2">
+            {filtered.map((designer) => (
+              <article key={designer.id} className="overflow-hidden rounded-[1.75rem] border border-border bg-card shadow-soft">
+                <img src={designer.coverImg} alt={designer.name} className="h-48 w-full object-cover" />
+                <div className="p-6">
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <p className="text-xs font-medium uppercase tracking-widest text-muted-foreground">{designer.title}</p>
+                      <h3 className="mt-1 font-display text-2xl font-medium">{designer.name}</h3>
+                    </div>
+                    <button
+                      onClick={() => handleFavoriteToggle(designer.id.toString())}
+                      className={`rounded-full border px-3 py-2 text-sm transition ${favoriteIds.includes(designer.id.toString()) ? "border-charcoal bg-charcoal text-white" : "border-border bg-white text-muted-foreground hover:text-foreground"}`}
+                    >
+                      {favoriteIds.includes(designer.id.toString()) ? "Saved" : "Save"}
+                    </button>
+                  </div>
+                  <div className="mt-4 flex flex-wrap items-center gap-3 text-sm text-muted-foreground">
+                    <span className="flex items-center gap-1"><MapPin className="h-3.5 w-3.5" /> {designer.location}</span>
+                    <span className="flex items-center gap-1"><Star className="h-3.5 w-3.5 text-amber-500" /> {designer.rating} ({designer.reviews})</span>
+                  </div>
+                  <p className="mt-4 text-sm leading-relaxed text-muted-foreground">{designer.specialties.join(" • ")}</p>
+                  <div className="mt-5 flex items-center justify-between text-sm">
+                    <div>
+                      <div className="font-medium text-foreground">{designer.startingPrice}</div>
+                      <div className="text-muted-foreground">starting from</div>
+                    </div>
+                    <a href={`/property/hillcrest-ridge`} className="inline-flex items-center gap-2 font-medium text-charcoal">View profile <ArrowRight className="h-4 w-4" /></a>
+                  </div>
+                </div>
+              </article>
             ))}
           </div>
         </div>
@@ -502,6 +776,69 @@ function Index() {
           </div>
         </section>
       )}
+
+      {/* ══ CONTACT & SUPPORT ══ */}
+      <section className="bg-secondary px-5 py-20 lg:px-8 lg:py-24">
+        <div className="mx-auto grid max-w-7xl gap-8 lg:grid-cols-[1.1fr_0.9fr]">
+          <div className="rounded-[2rem] border border-border bg-white p-8 shadow-soft">
+            <p className="text-xs font-medium uppercase tracking-[0.3em] text-muted-foreground">Book a consultation</p>
+            <h2 className="mt-2 font-display text-3xl font-medium">Let our concierge team guide your next move.</h2>
+            <p className="mt-3 text-sm leading-relaxed text-muted-foreground">
+              Share your project needs and we’ll help you shortlist the right designer, review your budget, and plan the next steps.
+            </p>
+            <form onSubmit={handleConsultationSubmit} className="mt-6 space-y-4">
+              <div className="grid gap-4 sm:grid-cols-2">
+                <input required value={consultationForm.name} onChange={(e) => setConsultationForm({ ...consultationForm, name: e.target.value })} placeholder="Your name" className="rounded-2xl border border-border bg-secondary/60 px-4 py-3 text-sm outline-none focus:border-charcoal" />
+                <input required type="email" value={consultationForm.email} onChange={(e) => setConsultationForm({ ...consultationForm, email: e.target.value })} placeholder="Email address" className="rounded-2xl border border-border bg-secondary/60 px-4 py-3 text-sm outline-none focus:border-charcoal" />
+              </div>
+              <select value={consultationForm.topic} onChange={(e) => setConsultationForm({ ...consultationForm, topic: e.target.value })} className="w-full rounded-2xl border border-border bg-secondary/60 px-4 py-3 text-sm outline-none focus:border-charcoal">
+                <option>New build</option>
+                <option>Renovation</option>
+                <option>Interior design</option>
+                <option>Luxury project</option>
+              </select>
+              <textarea required rows={4} value={consultationForm.message} onChange={(e) => setConsultationForm({ ...consultationForm, message: e.target.value })} placeholder="Tell us about your space, timeline, and goals..." className="w-full rounded-2xl border border-border bg-secondary/60 px-4 py-3 text-sm outline-none focus:border-charcoal" />
+
+              <div className="flex items-center gap-3">
+                <label className="inline-flex items-center gap-2 rounded-2xl border border-border bg-secondary/60 px-4 py-3 text-sm text-muted-foreground cursor-pointer">
+                  <input type="file" accept="image/*" multiple onChange={(e) => setAttachments(Array.from(e.target.files || []))} className="hidden" />
+                  Upload photos
+                  <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" viewBox="0 0 24 24" fill="none"><path d="M12 4v12" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/><path d="M8 8l4-4 4 4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                </label>
+                {attachments.length > 0 && (
+                  <div className="text-sm text-muted-foreground">{attachments.length} file(s) selected</div>
+                )}
+              </div>
+
+              <button type="submit" className="inline-flex items-center gap-2 rounded-full bg-charcoal px-6 py-3.5 text-sm font-medium text-white transition hover:bg-charcoal/90">Send request <ArrowRight className="h-4 w-4" /></button>
+              {consultationMessage && <p className="text-sm text-muted-foreground">{consultationMessage}</p>}
+            </form>
+          </div>
+
+          <div className="rounded-[2rem] border border-border bg-charcoal p-8 text-white shadow-luxe">
+            <p className="text-xs font-medium uppercase tracking-[0.3em] text-white/60">Live concierge</p>
+            <h3 className="mt-2 font-display text-3xl font-medium">Need help choosing a designer?</h3>
+            <p className="mt-3 text-sm leading-relaxed text-white/70">
+              Our team can recommend architects by style, budget, and location in a single message.
+            </p>
+            <div className="mt-6 space-y-3">
+              {[
+                "I need a modern home architect",
+                "I’m renovating and need a shortlist",
+                "I want luxury interior design help",
+              ].map((prompt) => (
+                <button key={prompt} onClick={() => handleSupportQuickReply(prompt)} className="block w-full rounded-2xl border border-white/10 bg-white/10 px-4 py-3 text-left text-sm text-white/80 transition hover:bg-white/15">
+                  {prompt}
+                </button>
+              ))}
+            </div>
+            <div className="mt-6 rounded-2xl border border-white/10 bg-white/10 p-4 text-sm text-white/80">
+              <div className="flex items-center gap-2 font-medium text-white"><Mail className="h-4 w-4" /> Quick reply</div>
+              <p className="mt-2">{supportReply}</p>
+            </div>
+          </div>
+        </div>
+      </section>
 
       {/* ══ CTA BANNER ══ */}
       <section className="bg-beige px-5 py-20 lg:px-8">

@@ -34,11 +34,33 @@ export interface SignInHistoryEntry {
   fileId?: string;
 }
 
+export interface ConsultationEnquiry {
+  id: string;
+  name: string;
+  email: string;
+  topic: string;
+  message: string;
+  createdAt: string;
+  status: "new" | "follow-up" | "contacted";
+}
+
+export interface PropertyListing {
+  id: string;
+  title: string;
+  location: string;
+  price: string;
+  status: "Live" | "Featured" | "Hidden";
+  createdAt: string;
+}
+
 const USERS_KEY = "casa_users";
 const CURRENT_USER_KEY = "casa_current_user";
 const FILES_KEY = "casa_files";
 const OTP_KEY = "casa_otp";
 const SIGNIN_HISTORY_KEY = "casa_signin_history";
+const FAVORITES_KEY = "casa_favorites";
+const ENQUIRIES_KEY = "casa_enquiries";
+const PROPERTY_LISTINGS_KEY = "casa_property_listings";
 
 // Seed admin account
 function seedAdmin() {
@@ -60,6 +82,110 @@ export function getUsers(): User[] {
   } catch {
     return [];
   }
+}
+
+export function getFavoritePropertyIds(): string[] {
+  if (typeof window === "undefined") return [];
+
+  try {
+    return JSON.parse(localStorage.getItem(FAVORITES_KEY) || "[]");
+  } catch {
+    return [];
+  }
+}
+
+export function getConsultationEnquiries(): ConsultationEnquiry[] {
+  if (typeof window === "undefined") return [];
+
+  try {
+    return JSON.parse(localStorage.getItem(ENQUIRIES_KEY) || "[]");
+  } catch {
+    return [];
+  }
+}
+
+export function saveConsultationEnquiry(enquiry: ConsultationEnquiry): void {
+  if (typeof window === "undefined") return;
+
+  const enquiries = getConsultationEnquiries();
+  enquiries.unshift(enquiry);
+  localStorage.setItem(ENQUIRIES_KEY, JSON.stringify(enquiries));
+}
+
+export function markConsultationEnquiryStatus(id: string, status: ConsultationEnquiry["status"]): void {
+  if (typeof window === "undefined") return;
+
+  const enquiries = getConsultationEnquiries().map((enquiry) => (enquiry.id === id ? { ...enquiry, status } : enquiry));
+  localStorage.setItem(ENQUIRIES_KEY, JSON.stringify(enquiries));
+}
+
+export function deleteConsultationEnquiry(id: string): void {
+  if (typeof window === "undefined") return;
+
+  const enquiries = getConsultationEnquiries().filter((enquiry) => enquiry.id !== id);
+  localStorage.setItem(ENQUIRIES_KEY, JSON.stringify(enquiries));
+}
+
+export function getPropertyListings(): PropertyListing[] {
+  if (typeof window === "undefined") return [];
+
+  try {
+    const stored = JSON.parse(localStorage.getItem(PROPERTY_LISTINGS_KEY) || "[]");
+    return stored.length > 0 ? stored : [
+      {
+        id: "hillcrest-ridge",
+        title: "Hillcrest Ridge Residence",
+        location: "Aspen, CO",
+        price: "$4,250,000",
+        status: "Featured",
+        createdAt: new Date().toISOString(),
+      },
+      {
+        id: "stonebriar-manor",
+        title: "Stonebriar Manor",
+        location: "Dallas, TX",
+        price: "$3,890,000",
+        status: "Live",
+        createdAt: new Date().toISOString(),
+      },
+    ];
+  } catch {
+    return [];
+  }
+}
+
+export function savePropertyListing(listing: PropertyListing): void {
+  if (typeof window === "undefined") return;
+
+  const listings = getPropertyListings();
+  const index = listings.findIndex((item) => item.id === listing.id);
+  if (index >= 0) {
+    listings[index] = listing;
+  } else {
+    listings.unshift(listing);
+  }
+  localStorage.setItem(PROPERTY_LISTINGS_KEY, JSON.stringify(listings));
+}
+
+export function deletePropertyListing(id: string): void {
+  if (typeof window === "undefined") return;
+
+  const listings = getPropertyListings().filter((listing) => listing.id !== id);
+  localStorage.setItem(PROPERTY_LISTINGS_KEY, JSON.stringify(listings));
+}
+
+export function isFavoriteProperty(id: string): boolean {
+  return getFavoritePropertyIds().includes(id);
+}
+
+export function toggleFavoriteProperty(id: string): boolean {
+  if (typeof window === "undefined") return false;
+
+  const favorites = getFavoritePropertyIds();
+  const exists = favorites.includes(id);
+  const next = exists ? favorites.filter((favorite) => favorite !== id) : [...favorites, id];
+  localStorage.setItem(FAVORITES_KEY, JSON.stringify(next));
+  return !exists;
 }
 
 export function getCurrentUser(): User | null {
