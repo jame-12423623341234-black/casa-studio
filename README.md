@@ -38,14 +38,13 @@ A modern, polished house design studio website with Gmail authentication, OTP ve
 
 ```bash
 # Install dependencies
-npm install
+bun install
 
-# Start the frontend
-npm run dev:frontend
-
-# Start the backend API in a second terminal
-npm run dev:backend
+# Start the frontend and backend locally
+bun run dev
 ```
+
+The development script starts the Vite frontend and the Express backend together. The frontend is served on the Vite URL reported in the terminal, and the backend runs on port 4000.
 
 ## Admin Access
 
@@ -59,25 +58,16 @@ When signed in as admin, a gear icon appears in the user menu to open the Admin 
 - File uploads should go to cloud storage (S3, Cloudflare R2) rather than `localStorage`
 - The `/download/:fileId` route should verify auth server-side and serve a signed URL
 
-## Hosting Setup
+## Environment Notes
 
-For a production deployment, host the frontend and backend separately:
-
-- Frontend: Vercel / Netlify / any static host for the Vite app
-- Backend API: Railway / Render / Fly.io for the Express API in the backend folder
-
-Set this environment variable on the frontend app:
-
-```bash
-VITE_API_BASE_URL=https://your-backend-domain.com
-```
-
-Set these on the backend service:
+For a local development setup, set these environment variables before starting the app if you want email sending and uploads to work:
 
 ```bash
 RESEND_API_KEY=your_resend_key
-UPLOADS_DIR=/app/.uploads
+UPLOADS_DIR=./.uploads
 ```
+
+The frontend uses the backend proxy from Vite, so the local API stays available at http://localhost:4000.
 
 ## Tech Stack
 

@@ -1,14 +1,1 @@
-node_modules
-npm-debug.log
-dist
-.git
-.gitignore
-.env
-.env.local
-.DS_Store
-.vscode
-.qodo
-.tanstack
-.wrangler
-.output
-build
+# Docker support has been removed. Local development uses Bun and Node directly.
