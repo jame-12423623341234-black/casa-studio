@@ -12,11 +12,21 @@ export default defineConfig({
     // nitro/vite builds from this
     server: { entry: "server" },
   },
+  nitro: {
+    preset: "node-server",
+    output: {
+      dir: ".output",
+      serverDir: ".output/server",
+      publicDir: ".output/public",
+    },
+  },
   vite: {
     server: {
+      host: "0.0.0.0",
+      port: 8080,
       proxy: {
-        '/api': 'http://localhost:4000'
-      }
-    }
-  }
+        '/api': 'http://localhost:4000',
+      },
+    },
+  },
 });

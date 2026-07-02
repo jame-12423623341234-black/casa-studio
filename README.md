@@ -38,13 +38,13 @@ A modern, polished house design studio website with Gmail authentication, OTP ve
 
 ```bash
 # Install dependencies
-bun install
+npm install
 
 # Start the frontend and backend locally
-bun run dev
+npm run dev
 ```
 
-The development script starts the Vite frontend and the Express backend together. The frontend is served on the Vite URL reported in the terminal, and the backend runs on port 4000.
+The development script starts the Vite frontend and the Express backend together. The frontend is served on http://localhost:8080, and the backend runs on port 4000.
 
 ## Admin Access
 
@@ -61,6 +61,8 @@ When signed in as admin, a gear icon appears in the user menu to open the Admin 
 ## Deployment
 
 Railway should use the normal `npm start` command, which now runs the built SSR server from `.output/server/index.mjs`.
+
+The production server binds to `process.env.PORT`, defaulting to `8080` when no port is provided.
 
 If you deploy from GitHub, Railway will install dependencies, build the project, and then start the service with this command.
 
