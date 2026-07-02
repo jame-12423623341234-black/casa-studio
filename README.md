@@ -58,6 +58,12 @@ When signed in as admin, a gear icon appears in the user menu to open the Admin 
 - File uploads should go to cloud storage (S3, Cloudflare R2) rather than `localStorage`
 - The `/download/:fileId` route should verify auth server-side and serve a signed URL
 
+## Deployment
+
+Railway should use the normal `npm start` command, which now runs the built SSR server from `.output/server/index.mjs`.
+
+If you deploy from GitHub, Railway will install dependencies, build the project, and then start the service with this command.
+
 ## Environment Notes
 
 For a local development setup, set these environment variables before starting the app if you want email sending and uploads to work:
