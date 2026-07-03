@@ -786,6 +786,9 @@ function Index() {
             <p className="mt-3 text-sm leading-relaxed text-muted-foreground">
               Share your project needs and we’ll help you shortlist the right designer, review your budget, and plan the next steps.
             </p>
+            <p className="mt-4 text-sm leading-relaxed text-muted-foreground">
+              Prefer Telegram? You can contact us directly at <a href="https://t.me/forever_dream97023" target="_blank" rel="noreferrer" className="font-medium text-charcoal underline underline-offset-4">@forever_dream97023</a>.
+            </p>
             <form onSubmit={handleConsultationSubmit} className="mt-6 space-y-4">
               <div className="grid gap-4 sm:grid-cols-2">
                 <input required value={consultationForm.name} onChange={(e) => setConsultationForm({ ...consultationForm, name: e.target.value })} placeholder="Your name" className="rounded-2xl border border-border bg-secondary/60 px-4 py-3 text-sm outline-none focus:border-charcoal" />
