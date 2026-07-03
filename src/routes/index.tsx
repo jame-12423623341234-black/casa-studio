@@ -815,28 +815,6 @@ function Index() {
             </form>
           </div>
 
-          <div className="rounded-[2rem] border border-border bg-charcoal p-8 text-white shadow-luxe">
-            <p className="text-xs font-medium uppercase tracking-[0.3em] text-white/60">Live concierge</p>
-            <h3 className="mt-2 font-display text-3xl font-medium">Need help choosing a designer?</h3>
-            <p className="mt-3 text-sm leading-relaxed text-white/70">
-              Our team can recommend architects by style, budget, and location in a single message.
-            </p>
-            <div className="mt-6 space-y-3">
-              {[
-                "I need a modern home architect",
-                "I’m renovating and need a shortlist",
-                "I want luxury interior design help",
-              ].map((prompt) => (
-                <button key={prompt} onClick={() => handleSupportQuickReply(prompt)} className="block w-full rounded-2xl border border-white/10 bg-white/10 px-4 py-3 text-left text-sm text-white/80 transition hover:bg-white/15">
-                  {prompt}
-                </button>
-              ))}
-            </div>
-            <div className="mt-6 rounded-2xl border border-white/10 bg-white/10 p-4 text-sm text-white/80">
-              <div className="flex items-center gap-2 font-medium text-white"><Mail className="h-4 w-4" /> Quick reply</div>
-              <p className="mt-2">{supportReply}</p>
-            </div>
-          </div>
         </div>
       </section>
 
